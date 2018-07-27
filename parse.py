@@ -30,8 +30,9 @@ class web(object):
                 not_successful = False
                 break
         if not_successful:
-            print "Error: can't parse html for any pages between these dates for {0}"\
+            error_str = "Error: can't parse html for any pages between these dates for {0}"\
                 .format(self.url)
+            self.error = error_str
             self.success = False
             return
 
@@ -58,14 +59,18 @@ class web(object):
             "to": to_year
         })
         if r.status_code != 200:
-            print("Error: Archive doesn't exist, HTTP code: {0} for {1}"\
-                  .format(r.status_code, self.url))
+            error_str = "Error: Archive doesn't exist, HTTP code: {0} for {1}"\
+                  .format(r.status_code, self.url)
+            print(error_str)
+            self.error = error_str
             return 1
         json_obj = r.json()[1:]
         timestamps = [x[0] for x in json_obj]
         if len(timestamps) == 0:
-            print "Error: no archived results for this url in between these dates: {0}"\
+            error_str = "Error: no archived results for this url in between these dates: {0}"\
                 .format(self.url)
+            print(error_str)
+            self.error = error_str
             return 1
         return timestamps
 
@@ -82,7 +87,7 @@ class web(object):
     def _get_soup(self, parse_url):
         r = requests.get(parse_url)
         if r.status_code != 200:
-            # print("Error: HTTP code: {0} for {1}".format(r.status_code, parse_url))
+            error_str = "Error: HTTP code: {0} for {1}".format(r.status_code, parse_url)
             return 1
         soup = BeautifulSoup(r.content, self.parser)
         return soup

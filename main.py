@@ -1,8 +1,9 @@
 from parse import web
+from spam_lists import SPAMHAUS_DBL
 import csv
 import scipy.cluster.vq as vq
 import numpy as np
-from spam_lists import SPAMHAUS_DBL
+
 import matplotlib.pyplot as plt
 
 class trusts(object):
@@ -12,6 +13,7 @@ class trusts(object):
         self.incompleted_webs = [x for x in self.all_webs]
         self.trusts = []
         self.untrusts = []
+        self.failed = []
 
     def _get_unique_arr(self, arr):
         unique = []
@@ -55,12 +57,12 @@ class trusts(object):
         successes = []
         for i, web in enumerate(self.parsed_webs):
             if not web.success:
-                self.untrusts.append(web.url)
+                self.failed.append([web.url, web.error])
                 unsuccesses.append(i)
             else:
                 successes.append(i)
         self.parsed_webs = [self.parsed_webs[i] for i in successes]
-        self.incompleted_webs = [self.incompleted_webs[i] for i in unsuccesses]
+        self.incompleted_webs = [self.incompleted_webs[i] for i in successes]
         return 0
 
     def _format_params(self, webs):
@@ -122,28 +124,37 @@ class trusts(object):
         self.check_params(self.parsed_webs)
         return 0
 
-    def _arr_to_csv(self, arr, fout):
+    def _arr_to_csv_1d(self, arr, fout):
         with open(fout, "wb") as f:
             w = csv.writer(f, delimiter=",", lineterminator="\n")
             for row in arr:
                 w.writerow([row])
         return 0
 
+    def _arr_to_csv_2d(self, arr, fout):
+        with open(fout, "wb") as f:
+            w = csv.writer(f, delimiter=",", lineterminator="\n")
+            for row in arr:
+                w.writerow(row)
+        return 0
+
     # prints out results of legit and fake websites to files
-    def print_trusts_to_file(self, fout_legit, fout_fake):
+    def print_trusts_to_file(self, fout_legit, fout_fake, fout_failed):
         trusts_no = len(self.trusts)
         untrusts_no = len(self.untrusts)
         print("total number of websites:\t{0}".format(len(self.all_webs)))
+        print("number of failed websites:\t{0}".format(len(self.failed)))
         print("number of legit websites:\t{0}".format(trusts_no))
         print("number of fake websites:\t{0}".format(untrusts_no))
         print("percentage of legit websites:\t{0:.2f}"\
               .format(float(trusts_no)/(trusts_no+untrusts_no)))
 
-        self._arr_to_csv(np.concatenate([["legit"], self.trusts]), fout_legit)
-        self._arr_to_csv(np.concatenate([["fake"], self.untrusts]), fout_fake)
+        self._arr_to_csv_1d(np.concatenate([np.array(["legit_sites"]), self.trusts]), fout_legit)
+        self._arr_to_csv_1d(np.concatenate([np.array(["fake_sites"]), self.untrusts]), fout_fake)
+        self._arr_to_csv_2d([["failed_sites", "error_code"]] + self.failed, fout_failed)
         return 0
 
 if __name__ == "__main__":
-    run = trusts()
+    run = trusts(websites_dir="./data/domains.csv")
     run.get_trusts()
-    run.print_trusts_to_file("./results/legit.csv", "./results/fakes.csv")
+    run.print_trusts_to_file("./results/legit.csv", "./results/fakes.csv", "./results/failed.csv")
