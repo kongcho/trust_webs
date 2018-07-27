@@ -1,24 +1,8 @@
-"""
-Write a script in R that would check if these domains are archived in wayback machine (http://archive.org/web/), and whether or not it has results in 2010 and 2011. A few of these sites might be spam sites, so I would recommend running the code via a university/library computer and not your personal machine.
-
-Provide a way of checking systematically if these are legit sites (e.g. accuweather is legit) or fake sites.
-
-first past filters
-- all ".gov" are good
-
-manual ways
-- % correctly spelt words
-- % legit links
-- % spam words dict
-  - free etc
-- % links that leads to ads
-"""
-
 from parse import web
 import csv
 import scipy.cluster.vq as vq
 import numpy as np
-
+from spam_lists import SPAMHAUS_DBL
 import matplotlib.pyplot as plt
 
 class trusts(object):
@@ -48,12 +32,13 @@ class trusts(object):
     def _is_gov_web(self, website):
         return True if ".gov" in website else False
 
-    # first pass of websites, for assumes all ".gov" are trustworthy
+    # first pass of websites, assumes all ".gov" are trustworthy and is not in spam database
     def check_first(self, websites):
         trusts = []
         untrusts = []
         for website in websites:
-            first_bools = [self._is_gov_web(website)]
+            first_bools = [self._is_gov_web(website)
+                           , website not in SPAMHAUS_DBL]
             if all(first_bools):
                 trusts.append(website)
                 websites.remove(website)
@@ -161,4 +146,4 @@ class trusts(object):
 if __name__ == "__main__":
     run = trusts()
     run.get_trusts()
-    run.print_trusts_to_file("./legit.csv", "./fakes.csv")
+    run.print_trusts_to_file("./results/legit.csv", "./results/fakes.csv")

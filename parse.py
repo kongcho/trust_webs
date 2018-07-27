@@ -1,15 +1,16 @@
 import requests
+import hunspell
 from nltk import word_tokenize
 from bs4 import BeautifulSoup
 from bs4.element import Comment
-import hunspell
+from spam_lists import SPAMHAUS_DBL
 
 class web(object):
 
     def __init__(self, url):
         self.base_url = "http://web.archive.org"
         self.url = url
-        self.all_params = ["perc_correct_words", "perc_alive_links"]
+        self.all_params = ["perc_correct_words", "perc_alive_links", "perc_nonspam_links"]
 
         # gets archived pages url
         self.time_urls = self.get_timestamp_urls(2010, 2011)
@@ -144,14 +145,28 @@ class web(object):
         r = requests.get(url)
         return True if r.status_code == 200 else False
 
+    def _get_alive_links(self, links):
+        alives = []
+        for link in links:
+            if self._does_link_exists(link):
+                alives.append(link)
+        return alives
+
     # gets percentage of links that are alive from webpage as statistic
     def get_param_alive_links(self):
         links = self._get_linked_urls(self.soup)
-        good_links = 0
-        for link in links:
-            if self._does_link_exists(link):
-                good_links += 1
+        good_links = len(self._get_alive_links(links))
         return float(good_links)/len(links) if len(links) != 0 else None
+
+    # gets percentage of links that are not spam
+    def get_param_spam_links(self):
+        links = self._get_linked_urls(self.soup)
+        good_links = self._get_alive_links(links)
+        non_spams = 0
+        for link in good_links:
+            if link not in SPAMHAUS_DBL:
+                non_spams += 1
+        return float(non_spams)/len(links) if len(links) != 0 else None
 
     def _create_param(self, key, value):
         self.params[key] = value
@@ -162,6 +177,7 @@ class web(object):
         self.params = {}
         self._create_param("perc_correct_words", self.get_param_spellcheck())
         self._create_param("perc_alive_links", self.get_param_alive_links())
+        self._create_param("perc_nonspam_links", self.get_param_spam_links())
 
 if __name__ == "__main__":
     pass
