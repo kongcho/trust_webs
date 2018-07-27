@@ -1,72 +1,167 @@
-"""
-Write a script in R that would check if these domains are archived in wayback machine (http://archive.org/web/), and whether or not it has results in 2010 and 2011. A few of these sites might be spam sites, so I would recommend running the code via a university/library computer and not your personal machine.
-
-Provide a way of checking systematically if these are legit sites (e.g. accuweather is legit) or fake sites.
-
-first past filters
-- all ".gov" are good
-
-manual ways
-- % correctly spelt words
-- % legit links
-- % spam words dict
-  - free etc
-- % links that leads to ads
-"""
-
-import csv
-
-import urllib
-import json
 import requests
+from nltk import word_tokenize
+from bs4 import BeautifulSoup
+from bs4.element import Comment
+import hunspell
 
 class web(object):
 
     def __init__(self, url):
         self.base_url = "http://web.archive.org"
         self.url = url
-        self.time_urls = self.get_timestamp_urls(2010, 2011)
+        self.all_params = ["perc_correct_words", "perc_alive_links"]
 
+        # gets archived pages url
+        self.time_urls = self.get_timestamp_urls(2010, 2011)
+        if self.time_urls == 1 or len(self.time_urls) == 0:
+            self.success = False
+            return
+        else:
+            self.success = True
+
+        # parse the first possible archived page
+        self.parser = "lxml"
+        not_successful = True
+        for i in range(len(self.time_urls)):
+            self.parse_url = self.time_urls[i]
+            self.soup = self._get_soup(self.parse_url)
+            if self.soup != 1:
+                not_successful = False
+                break
+        if not_successful:
+            print "Error: can't parse html for any pages between these dates for {0}"\
+                .format(self.url)
+            self.success = False
+            return
+
+        # get statistics on the first archived page
+        self.setup_params(self.parse_url)
+
+    # helper, uses wayback api to get last timestamped page url
     def _get_latest_wburl(self):
-        wburl = "https://archive.org/wayback/available?url={0}".format(self.url)
-        f = urllib.urlopen(wburl)
-        json_obj = json.load(f)
-        dic = json_obj["archived_snapshots"]["closest"]
+        wburl = "https://archive.org/wayback/available".format(self.url)
+        r = requests.get(wburl, params={
+            "url": self.url
+        })
+        dic = r.json()["archived_snapshots"]["closest"]
         if dic["available"]:
             return dic["url"]
 
     def _get_timestamps(self, from_yr, to_year):
-        cdxurl = "{0}/cdx/search/cdx?url={1}&from={2}&to={3}&fl=timestamp"\
-                 .format(self.base_url, self.url, from_yr, to_year)
-        req = urllib.urlopen(cdxurl)
-        str_list = req.read()
-        timestamps = str_list.strip().split("\n")
+        cdxurl = "{0}/cdx/search/cdx".format(self.base_url)
+        r = requests.get(cdxurl, params={
+            "url": self.url,
+            "fl": "timestamp",
+            "output": "json",
+            "from": from_yr,
+            "to": to_year
+        })
+        if r.status_code != 200:
+            print("Error: Archive doesn't exist, HTTP code: {0} for {1}"\
+                  .format(r.status_code, self.url))
+            return 1
+        json_obj = r.json()[1:]
+        timestamps = [x[0] for x in json_obj]
         if len(timestamps) == 0:
-            print "Error: no archived results for this url in between these dats"
+            print "Error: no archived results for this url in between these dates: {0}"\
+                .format(self.url)
             return 1
         return timestamps
 
+    # collects all wayback archived pages in between dates
     def get_timestamp_urls(self, from_yr, to_year):
         timestamps = self._get_timestamps(from_yr, to_year)
         if timestamps == 1:
             return 1
         url_list = []
         for timestamp in timestamps:
-            url_list.append("{0}/web/{1}/{2}".format(self.base_url, timestamp, self.url))
+            url_list.append("{0}/web/{1}id_/{2}".format(self.base_url, timestamp, self.url))
         return url_list
 
-# gets list of websites to analyse through from file
-def get_websites(filename, col_no=1, skip_rows=2):
-    websites = []
-    with open(filename, "r") as f:
-        for _ in range(skip_rows):
-            next(f)
-        r = csv.reader(f, delimiter=",", skipinitialspace=True)
-        for row in reader:
-            websites.append(row[col_no])
-    return websites
+    def _get_soup(self, parse_url):
+        r = requests.get(parse_url)
+        if r.status_code != 200:
+            # print("Error: HTTP code: {0} for {1}".format(r.status_code, parse_url))
+            return 1
+        soup = BeautifulSoup(r.content, self.parser)
+        return soup
+
+    # editted from https://stackoverflow.com/questions/1936466/
+    def _is_tag_visible(self, element):
+        if element.parent.name in ['style', 'script', 'head', 'title', 'meta', '[document]']:
+            return False
+        if isinstance(element, Comment):
+            return False
+        return True
+
+    # editted from https://stackoverflow.com/questions/1936466/
+    def _text_from_html(self, soup):
+        texts = soup.findAll(text=True)
+        visible_texts = filter(self._is_tag_visible, texts)
+        return u" ".join(t.strip() for t in visible_texts)
+
+    def _get_web_text(self, soup):
+        return self._text_from_html(soup)
+
+    def _words_from_text(self, text):
+        tokens = word_tokenize(text)
+        words = [x for x in tokens if x.isalpha()]
+        return words
+
+    # gets list of words from webpage
+    def get_web_words(self):
+        text = self._get_web_text(self.soup)
+        return self._words_from_text(text) if text is not None else None
+
+    def _count_spellcheck(self, words, dict_locations=("./dict/en_US.dic", "./dict/en_US.aff")):
+        correct = 0
+        incorrect = 0
+        loc1, loc2 = dict_locations
+        checker = hunspell.HunSpell(loc1, loc2)
+        for word in words:
+            if checker.spell(word):
+                correct += 1
+            else:
+                incorrect += 1
+        return correct, incorrect
+
+    # gets percentage of correctly spelt words as a statistic
+    def get_param_spellcheck(self):
+        words = self.get_web_words()
+        correct, incorrect = self._count_spellcheck(words)
+        total = correct + incorrect
+        return float(correct)/total if total != 0 else 0
+
+    def _get_linked_urls(self, soup):
+        all_links = soup.findAll("a")
+        links = []
+        for link in all_links:
+            if "http" in link:
+                links.append(link)
+        return links
+
+    def _does_link_exists(self, url):
+        r = requests.get(url)
+        return True if r.status_code == 200 else False
+
+    # gets percentage of links that are alive from webpage as statistic
+    def get_param_alive_links(self):
+        links = self._get_linked_urls(self.soup)
+        good_links = 0
+        for link in links:
+            if self._does_link_exists(link):
+                good_links += 1
+        return float(good_links)/len(links) if len(links) != 0 else None
+
+    def _create_param(self, key, value):
+        self.params[key] = value
+        return 0
+
+    # calculates lists of statistics for webpage
+    def setup_params(self, url):
+        self.params = {}
+        self._create_param("perc_correct_words", self.get_param_spellcheck())
+        self._create_param("perc_alive_links", self.get_param_alive_links())
 
 if __name__ == "__main__":
-    url = "facdn.com"
-    webs = web(url)
-    print webs.time_urls
+    pass
