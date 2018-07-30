@@ -8,12 +8,13 @@ import matplotlib.pyplot as plt
 
 class trusts(object):
 
-    def __init__(self, websites_dir="./data/domains.csv"):
+    def __init__(self, date_range, websites_dir="./data/domains.csv"):
         self.all_webs = self.get_websites(websites_dir)
         self.incompleted_webs = [x for x in self.all_webs]
         self.trusts = []
         self.untrusts = []
         self.failed = []
+        self.dates = date_range
 
     def _get_unique_arr(self, arr):
         unique = []
@@ -48,7 +49,8 @@ class trusts(object):
 
     # parses the wayback webpages for given urls
     def setup_webs(self, urls):
-        webs = [web(url) for url in urls]
+        from_date, to_date = self.dates
+        webs = [web(url, from_date, to_date) for url in urls]
         return webs
 
     # assumes website is untrustworthy if it doesn't have an archive
@@ -155,6 +157,7 @@ class trusts(object):
         return 0
 
 if __name__ == "__main__":
-    run = trusts(websites_dir="./data/domains.csv")
-    run.get_trusts()
-    run.print_trusts_to_file("./results/legit.csv", "./results/fakes.csv", "./results/failed.csv")
+    run11 = trusts((2011, 2011), websites_dir="./data/domains.csv")
+    run11.get_trusts()
+    run11.print_trusts_to_file("./results/legit11.csv", "./results/fakes11.csv", \
+                               "./results/failed11.csv")

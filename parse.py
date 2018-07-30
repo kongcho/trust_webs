@@ -7,13 +7,13 @@ from spam_lists import SPAMHAUS_DBL
 
 class web(object):
 
-    def __init__(self, url):
+    def __init__(self, url, from_date, to_date):
         self.base_url = "http://web.archive.org"
         self.url = url
         self.all_params = ["perc_correct_words", "perc_alive_links", "perc_nonspam_links"]
 
         # gets archived pages url
-        self.time_urls = self.get_timestamp_urls(2010, 2011)
+        self.time_urls = self.get_timestamp_urls(from_date, to_date)
         if self.time_urls == 1 or len(self.time_urls) == 0:
             self.success = False
             return
@@ -85,7 +85,11 @@ class web(object):
         return url_list
 
     def _get_soup(self, parse_url):
-        r = requests.get(parse_url)
+        try:
+            r = requests.get(parse_url)
+        except Exception as e:
+            error_str = "Error: {0}".format(e.message)
+            return 1
         if r.status_code != 200:
             error_str = "Error: HTTP code: {0} for {1}".format(r.status_code, parse_url)
             return 1
@@ -185,4 +189,7 @@ class web(object):
         self._create_param("perc_nonspam_links", self.get_param_spam_links())
 
 if __name__ == "__main__":
+    url = "gamevance.net"
+    w = web(url, 2011, 2011)
+    print w.time_urls
     pass
